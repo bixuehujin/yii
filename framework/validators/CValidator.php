@@ -80,6 +80,12 @@ abstract class CValidator extends CComponent
 		'date'=>'CDateValidator',
 	);
 
+	private $_validStates = array();
+	
+	private $_errorHandler;
+	
+	private $_states = array();
+	
 	/**
 	 * @var array list of attributes to be validated.
 	 */
@@ -136,9 +142,11 @@ abstract class CValidator extends CComponent
 	 * @param mixed $attributes list of attributes to be validated. This can be either an array of
 	 * the attribute names or a string of comma-separated attribute names.
 	 * @param array $params initial values to be applied to the validator properties
+	 * @param array $validStates define the valid states used in this validator.
+	 * @param callable $errorHandler the handler to handle error messages instead of the default addError().
 	 * @return CValidator the validator
 	 */
-	public static function createValidator($name,$object,$attributes,$params=array())
+	public static function createValidator($name,$object,$attributes,$params=array(),$validStates=array(),$errorHandler=null)
 	{
 		if(is_string($attributes))
 			$attributes=preg_split('/[\s,]+/',$attributes,-1,PREG_SPLIT_NO_EMPTY);
@@ -185,6 +193,10 @@ abstract class CValidator extends CComponent
 			else
 				$className=Yii::import($name,true);
 			$validator=new $className;
+			
+			$validator->setValidStates($validStates);
+			$validator->setErrorHandler($errorHandler);
+			
 			foreach($params as $name=>$value)
 				$validator->$name=$value;
 		}
@@ -250,6 +262,59 @@ abstract class CValidator extends CComponent
 	}
 
 	/**
+	 * @param string $name
+	 * @param mixed $value
+	 */
+	public function setState($name,$value)
+	{
+		if(in_array($name,$this->_validStates))
+			$this->_states[$name]=$value;
+		else 
+			throw new CException(Yii::t('yii','The state {state} is not defined. Use {class}::setValidStates() to define valid states.'),array('{state}'=>$name,'{class}'=>get_class($this)));
+	}
+
+	/**
+	 * @param string $name
+	 * @param string $default
+	 * @return mixed
+	 */
+	public function getState($name,$default=null)
+	{
+		return isset($this->_states[$name]) ? $this->_states[$name] : $default;
+	}
+	
+	/**
+	 * @param array $names
+	 */
+	public function setValidStates($names)
+	{
+		$this->_validStates = $names;
+	}
+	
+	/**
+	 * @return array
+	 */
+	public function getValidStates()
+	{
+		return $this->_validStates;
+	}
+	
+	/**
+	 * Set the handler to handle error messages, default to used buildin addError().
+	 * 
+	 * @param callable $handler
+	 * @throws CException
+	 */
+	public function setErrorHandler($handler)
+	{
+		if ($handler !== null && !is_callable($handler))
+			throw new CException(Yii::t('yii', 'The error handler is invalid.'));
+		else
+			$this->_errorHandler = $handler;
+	}
+	
+	
+	/**
 	 * Adds an error about the specified attribute to the active record.
 	 * This is a helper method that performs message selection and internationalization.
 	 * @param CModel $object the data object being validated
@@ -259,8 +324,12 @@ abstract class CValidator extends CComponent
 	 */
 	protected function addError($object,$attribute,$message,$params=array())
 	{
+		$handler = $this->_errorHandler;
 		$params['{attribute}']=$object->getAttributeLabel($attribute);
-		$object->addError($attribute,strtr($message,$params));
+		if ($handler === null)
+			$object->addError($attribute,strtr($message,$params));
+		else
+			$handler($this, $attribute, strtr($message,$params));
 	}
 
 	/**
@@ -274,6 +343,50 @@ abstract class CValidator extends CComponent
 	protected function isEmpty($value,$trim=false)
 	{
 		return $value===null || $value===array() || $value==='' || $trim && is_scalar($value) && trim($value)==='';
+	}
+	
+	/**
+	 * @see CComponent::__get()
+	 */
+	public function __get($name)
+	{
+		if(in_array($name,$this->_validStates))
+			return $this->getState($name);
+		else 
+			return parent::__get($name);
+	}
+	
+	/**
+	 * @see CComponent::__set()
+	 */
+	public function __set($name, $value)
+	{
+		if(in_array($name,$this->_validStates)) 
+			return $this->setState($name,$value);
+		else 
+			return parent::__set($name, $value);
+	}
+	
+	/**
+	 * @see CComponent::__isset()
+	 */
+	public function __isset($name)
+	{
+		if(in_array($name,$this->_validStates))
+			return $this->getState($name) !== null;
+		else 
+			return parent::__isset($name);
+	}
+	
+	/**
+	 * @see CComponent::__unset()
+	 */
+	public function __unset($name)
+	{
+		if(in_array($name,$this->_validStates))
+			return $this->setState($name, null);
+		else
+			return parent::__unset($name);
 	}
 }
 
