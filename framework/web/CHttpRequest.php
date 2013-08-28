@@ -487,7 +487,13 @@ class CHttpRequest extends CApplicationComponent
 				$this->_requestUri=$_SERVER['HTTP_X_REWRITE_URL'];
 			elseif(isset($_SERVER['REDIRECT_URL']) || isset($_SERVER['REQUEST_URI']))
 			{
-				$this->_requestUri=isset($_SERVER['REDIRECT_URL']) ? $_SERVER['REDIRECT_URL'] : $_SERVER['REQUEST_URI']; 
+				$this->_requestUri = $_SERVER['REQUEST_URI'];
+				if (isset($_SERVER['REDIRECT_URL'])) {
+					$this->_requestUri=$_SERVER['REDIRECT_URL'];
+					if (!empty($_SERVER['QUERY_STRING'])) {
+						$this->_requestUri .= '?'.$_SERVER['QUERY_STRING'];
+					}
+				}
 				if(!empty($_SERVER['HTTP_HOST']))
 				{
 					if(strpos($this->_requestUri,$_SERVER['HTTP_HOST'])!==false)
